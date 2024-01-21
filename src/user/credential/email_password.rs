@@ -5,6 +5,7 @@ use argon2::{
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
 use serde::{Deserialize, Serialize};
+use crate::user::DbUser;
 use surrealdb::{
     engine::remote::ws::Client,
     sql::{Id, Thing},
@@ -17,8 +18,10 @@ use surrealdb::{
 /// The password is hashed with Argon2.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmailPasswordCredential {
+    /// The credential's identifier. This is actually an array with two
+    /// strings: the first one represents the credential type (in this case `EmailPassword`)
+    /// while the second one is the actual identifier (which in the case is the [User]'s email).
     pub id: Thing,
-    pub mfa: Option<String>,
     data: String,
     #[serde(skip)]
     hashed: bool,
@@ -27,6 +30,7 @@ pub struct EmailPasswordCredential {
 }
 
 impl EmailPasswordCredential {
+    /// The credential's constructor
     pub fn new(email: String, password: String) -> Self {
         Self {
             id: Thing::from((
@@ -34,7 +38,6 @@ impl EmailPasswordCredential {
                 Id::Array(vec!["EmailPassword".to_string(), email].into()),
             )),
             data: password,
-            mfa: None,
             hashed: false,
             associated_user: None,
         }
@@ -61,7 +64,6 @@ impl Credential for EmailPasswordCredential {
             data: Argon2::default()
                 .hash_password(self.data.as_bytes(), &SaltString::generate(&mut OsRng))?
                 .to_string(),
-            mfa: self.mfa.clone(),
             hashed: true,
             associated_user: self.associated_user.clone(),
         }))
@@ -87,9 +89,10 @@ impl Credential for EmailPasswordCredential {
             .query("SELECT * FROM $user_id;")
             .bind(("user_id", credential.associated_user))
             .await?
-            .take::<Option<User>>(0)
+            .take::<Option<DbUser>>(0)
             .map_err(|_| AuthError::InexistentUser)?
-            .ok_or(AuthError::InexistentUser)?;
+            .ok_or(AuthError::InexistentUser)?
+            .into();
 
         // Checks if the user's account has been disabled
         if user.metadata.disabled {
