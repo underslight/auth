@@ -10,7 +10,7 @@ use serde::Serialize;
 /// [ ] Last access location
 /// [ ] Last password
 /// [ ] Disabled reason
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UserMetadata {
     /// Whether or not the account is currently disabled
     pub disabled: bool,
@@ -36,7 +36,7 @@ impl Buildable for UserMetadata {
 /// The [UserMetadata] builder struct
 /// 
 /// # Example
-/// ```
+/// ```ignore
 /// let timestamp = get_current_timestamp();
 /// let user_metadata = UserMetadata::builder() // Gets the builder
 ///     .disabled(true)
@@ -104,7 +104,7 @@ impl UserMetadataBuilder {
     /// Sets the disabled flag
     /// 
     /// # Example
-    /// ```
+    /// ```ignore
     /// let metadata = UserMetadata::builder()
     ///     .disabled(true)
     ///     .build_safe();
@@ -117,7 +117,7 @@ impl UserMetadataBuilder {
     /// Sets the verified flag
     /// 
     /// # Example
-    /// ```
+    /// ```ignore
     /// let metadata = UserMetadata::builder()
     ///     .verified(true)
     ///     .build_safe();
@@ -130,7 +130,7 @@ impl UserMetadataBuilder {
     /// Sets the last access timestamp
     /// 
     /// # Example
-    /// ```
+    /// ```ignore
     /// let metadata = UserMetadata::builder()
     ///     .last_access(get_current_timestamp())
     ///     .build_safe();
@@ -143,7 +143,7 @@ impl UserMetadataBuilder {
     /// Sets the last password reset timestamp
     /// 
     /// # Example
-    /// ```
+    /// ```ignore
     /// let metadata = UserMetadata::builder()
     ///     .last_reset(get_current_timestamp)
     ///     .build_safe();
@@ -151,5 +151,59 @@ impl UserMetadataBuilder {
     pub fn last_reset(&mut self, last_reset: u64) -> &mut Self {
         self.last_reset = Some(last_reset);
         self
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::UserMetadata;
+    use crate::builder::*;
+
+    #[test]
+    fn metadata_builder_build() {
+        let metadata_safe = UserMetadata::builder()
+            .build_safe();
+
+        let metadata = UserMetadata::builder()
+            .build()
+            .unwrap();
+
+        assert_eq!(metadata_safe, metadata)
+    }
+
+    #[test]
+    fn metadata_builder_disabled() {
+        let metadata = UserMetadata::builder()
+            .disabled(true)
+            .build_safe();
+
+        assert_eq!(metadata.disabled, true)
+    }
+
+    #[test]
+    fn metadata_builder_verified() {
+        let metadata = UserMetadata::builder()
+            .verified(true)
+            .build_safe();
+
+        assert_eq!(metadata.verified, true)
+    }
+
+    #[test]
+    fn metadata_builder_last_access() {
+        let metadata = UserMetadata::builder()
+            .last_access(0)
+            .build_safe();
+
+        assert_eq!(metadata.last_access, 0)
+    }
+
+    #[test]
+    fn metadata_builder_last_reset() {
+        let metadata = UserMetadata::builder()
+            .last_reset(0)
+            .build_safe();
+
+        assert_eq!(metadata.last_reset, 0)
     }
 }

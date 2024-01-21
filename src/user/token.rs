@@ -1,7 +1,7 @@
 use std::{fs::File, io::{BufReader, Read}};
 use crate::prelude::*;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
 
 /// Specifies the scope and permissions of a token
 #[derive(Clone, Debug, Serialize, Deserialize)]

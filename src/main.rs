@@ -1,10 +1,10 @@
-use auth::builder::{Buildable, Builder};
+// use auth::builder::{Buildable, Builder};
 use auth::prelude::*;
 use auth::user::attributes::UserAttribute;
 
-use auth::user::credential::email_password::EmailPasswordCredential;
-use auth::user::credential::Credential;
-use auth::user::metadata::UserMetadata;
+// use auth::user::credential::email_password::EmailPasswordCredential;
+// use auth::user::credential::Credential;
+// use auth::user::metadata::UserMetadata;
 use serde::{Deserialize, Serialize};
 use surrealdb::engine::remote::ws::Ws;
 use surrealdb::opt::auth::Database;

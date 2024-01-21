@@ -59,7 +59,7 @@ use self::token::TokenType;
 /// they're only associated in the DB via graph relations.
 /// 
 /// Creating a [User] is straightforward: 
-/// ```
+/// ```ignore
 /// let user = User::builder ()
 ///     .attributes(...)
 ///     .metadata(...)
