@@ -1,6 +1,6 @@
 use std::{fs::File, io::{BufReader, Read}};
 use crate::prelude::*;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, get_current_timestamp, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 /// Specifies the scope and permissions of a token
@@ -105,14 +105,20 @@ impl Token {
         validation_config.set_audience(&["some-client-id"]);
         validation_config.set_issuer(&["auth-alpha"]);
         validation_config.sub = Some(sub);
+        validation_config.validate_exp = false; // This will be checked independantly
 
-        Ok(
-            decode::<TokenClaims>(
-                token.data.as_str(), &
-                Self::get_decoding_key().unwrap(), 
-                &validation_config
-            ).unwrap().claims
-        )
+        let claims = decode::<TokenClaims>(
+            token.data.as_str(), &
+            Self::get_decoding_key()?, 
+            &validation_config
+        )?.claims;
+
+        // Checks if the token is expired
+        if get_current_timestamp() > claims.exp {
+            return Err(AuthError::TokenExpired);
+        }
+
+        Ok(claims)
     }
 }
 
