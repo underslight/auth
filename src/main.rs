@@ -1,7 +1,10 @@
+use auth::builder::{Buildable, Builder};
 // use auth::builder::{Buildable, Builder};
 use auth::prelude::*;
 use auth::user::attributes::UserAttribute;
 
+use auth::user::credential::email_password::EmailPasswordCredential;
+use auth::user::metadata::UserMetadata;
 // use auth::user::credential::email_password::EmailPasswordCredential;
 // use auth::user::credential::Credential;
 // use auth::user::metadata::UserMetadata;
@@ -39,6 +42,14 @@ async fn main() -> AuthResult<()> {
     }) 
     .await
     .unwrap();
+
+    let c = EmailPasswordCredential::new("studente@maxwell.mi.it".into(), "password".into());
+    let _u = User::builder()
+        .metadata(UserMetadata::builder().build_safe())
+        .build_safe()
+        .save(&db, &c)
+        .await
+        .unwrap();
 
     Ok(())
 }

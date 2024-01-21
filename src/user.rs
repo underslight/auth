@@ -74,7 +74,7 @@ pub struct User {
     pub id: Thing,
     /// The attributes are a set of custom fields that contain unique data
     /// about the user.
-    pub attributes: Box<dyn UserAttribute>,
+    pub attributes: Option<Box<dyn UserAttribute>>,
     /// The metadata contains auth data such as previous password, 
     /// last access location, and such.
     pub metadata: UserMetadata,
@@ -112,10 +112,7 @@ impl Builder for UserBuilder {
                 Some(id) => id.clone(),
                 None => Thing::from((String::from("user"), Uuid::new_v4().to_string())),
             },
-            attributes: match &self.attributes {
-                Some(attributes) => attributes.clone(),
-                None => panic!(),
-            },
+            attributes: self.attributes.clone(),
             metadata: match self.metadata {
                 Some(metadata) => metadata,
                 None => UserMetadata::default(),
@@ -166,7 +163,7 @@ impl User {
 
     /// Sets the `attributes` field in the [User] struct
     pub fn attributes(&mut self, attributes: Box<dyn UserAttribute>) -> &mut Self {
-        self.attributes = attributes;
+        self.attributes = Some(attributes);
         self
     }
 
