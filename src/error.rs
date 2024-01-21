@@ -27,14 +27,14 @@ pub enum AuthError {
     #[error("The token is invalid!")]
     TokenInvalid,
     #[error("Something went with the database!")]
-    Database(surrealdb::Error),
+    DatabaseFailed(surrealdb::Error),
     #[error("{0}")]
     Unknown(String),
 }
 
 impl From<surrealdb::Error> for AuthError {
     fn from(value: surrealdb::Error) -> Self {
-        Self::Database(value)
+        Self::DatabaseFailed(value)
     }
 }
 
