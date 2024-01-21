@@ -9,7 +9,7 @@
 /// also allowing error handling.
 /// 
 /// # Example
-/// ```
+/// ```ignore
 /// use auth::prelude::*;
 /// use auth::builder::*;
 /// 

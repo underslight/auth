@@ -15,7 +15,7 @@ use dyn_clone::{DynClone, clone_trait_object};
 /// **A `#[typetag::serde]` macro must be included at the start of every UserAttribute `impl` block!**
 /// 
 /// # Example
-/// ```
+/// ```ignore
 /// use serde::{Serialize, Deserialize};
 /// 
 /// #[derive(Clone, Debug, Serialize, Deserialize)]

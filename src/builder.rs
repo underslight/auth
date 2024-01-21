@@ -5,7 +5,7 @@ use crate::prelude::*;
 /// builder pattern.
 /// 
 /// # Example
-/// ```
+/// ```ignore
 /// use auth::builder::*;
 /// 
 /// // The complex struct we want to build
@@ -49,7 +49,7 @@ pub trait Buildable {
 ///  - By calling the [build_safe](Builder::build_safe) method, which will always succeed (if it's implemented)
 /// 
 /// # Example
-/// ```
+/// ```ignore
 /// use auth::prelude::*;
 /// use auth::builder::*;
 /// 

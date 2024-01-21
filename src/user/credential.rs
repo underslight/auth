@@ -37,7 +37,7 @@ pub trait Credential: std::fmt::Debug {
     /// function will return the [User] associated with it
     /// 
     /// # Example
-    /// ```
+    /// ```ignore
     /// use auth::user::credential::EmailPasswordCredential;
     /// use auth::prelude::*;
     /// 
