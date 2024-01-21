@@ -75,28 +75,26 @@ impl Credential for EmailPasswordCredential {
             .query("SELECT * FROM $credential_id->authenticates;")
             .bind(("credential_id", self.id.clone()))
             .await?
-            .take::<Option<Self>>(0)
-            .map_err(|_| AuthError::IncorrectCredential)?
-            .ok_or(AuthError::IncorrectCredential)?;
+            .take::<Option<Self>>(0)?
+            .ok_or(AuthError::CredentialNotFound("The credential is incorrect or could not be found!".into()))?;
 
         // Checks if the password and the hash match
         Argon2::default()
             .verify_password(self.data.as_ref(), &PasswordHash::new(&credential.data)?)
-            .map_err(|_| AuthError::IncorrectCredential)?;
+            .map_err(|_| AuthError::CredentialNotFound("The credential is incorrect or could not be found!".into()))?;
 
         // Fetches the user associated with the user id
         let mut user: User = db
             .query("SELECT * FROM $user_id;")
             .bind(("user_id", credential.associated_user))
             .await?
-            .take::<Option<DbUser>>(0)
-            .map_err(|_| AuthError::InexistentUser)?
-            .ok_or(AuthError::InexistentUser)?
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::Unknown("The associated user doesn't exist!".into()))?
             .into();
 
         // Checks if the user's account has been disabled
         if user.metadata.disabled {
-            return Err(AuthError::DisabledUser);
+            return Err(AuthError::UserDisabled);
         }
 
         // Updates the last access timestamp
@@ -104,7 +102,7 @@ impl Credential for EmailPasswordCredential {
         user
             .update(&db)
             .await
-            .map_err(|_| AuthError::FailedLastAccessUpdate)?;
+            .map_err(|_| AuthError::UpdateFailed("Failed to update last access!".into()))?;
 
         Ok(user)
     }

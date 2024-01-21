@@ -108,8 +108,6 @@ impl From<&User> for DbUser {
     }
 } 
 
-// TODO: ukw!!!
-
 impl From<DbUser> for User {
     fn from(value: DbUser) -> Self {
         Self {
@@ -225,7 +223,7 @@ impl User {
             .bind(("user", DbUser::from(self)))
             .await?
             .take::<Option<DbUser>>(0)?
-            .ok_or(AuthError::InexistentUser)?
+            .ok_or(AuthError::SaveFailed("Failed to save user!".into()))?
             .into())
     }
 
@@ -234,11 +232,9 @@ impl User {
         Ok(db
             .query("UPDATE $user.id CONTENT $user RETURN AFTER;")
             .bind(("user", DbUser::from(self)))
-            .await
-            .unwrap()
-            .take::<Option<DbUser>>(0)
-            .unwrap()
-            .ok_or(AuthError::InexistentUser)?
+            .await?
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::UpdateFailed("Failed to update user!".into()))?
             .into())
     }
 
@@ -256,7 +252,7 @@ impl User {
             .bind(("user", DbUser::from(self)))
             .await?
             .take::<Option<DbUser>>(0)?
-            .ok_or(AuthError::InexistentUser)?
+            .ok_or(AuthError::CredentialDuplicate("Cannot associate the same credential twice!".into()))?
             .into())
     }
 
@@ -330,10 +326,10 @@ impl User {
                     .bind(("credential", credential))
                     .await?;
             } else {
-                return Err(AuthError::CannotRemoveOnlyCredential);
+                return Err(AuthError::CredentialOnly("Cannot remove the only authentication method!".into()));
             }
         } else {
-            return Err(AuthError::UnassociatedCredential);
+            return Err(AuthError::CredentialNotFound("The authentication method couldn't be found or doesn't exist!".into()));
         }
 
         Ok(self.clone())
