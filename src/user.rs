@@ -222,7 +222,8 @@ impl User {
             .bind(("credential", credential.hashed()?))
             .bind(("user", DbUser::from(self)))
             .await?
-            .take::<Option<DbUser>>(0)?
+            .take::<Option<DbUser>>(0)
+            .map_err(|_| AuthError::CredentialDuplicate("This user is already registered!".into()))?
             .ok_or(AuthError::SaveFailed("Failed to save user!".into()))?
             .into())
     }
@@ -233,7 +234,8 @@ impl User {
             .query("UPDATE $user.id CONTENT $user RETURN AFTER;")
             .bind(("user", DbUser::from(self)))
             .await?
-            .take::<Option<DbUser>>(0)?
+            .take::<Option<DbUser>>(0)
+            .map_err(|_| AuthError::UpdateFailed("Failed to update user!".into()))?
             .ok_or(AuthError::UpdateFailed("Failed to update user!".into()))?
             .into())
     }
@@ -251,8 +253,9 @@ impl User {
             .bind(("credential", credential.hashed()?))
             .bind(("user", DbUser::from(self)))
             .await?
-            .take::<Option<DbUser>>(0)?
-            .ok_or(AuthError::CredentialDuplicate("Cannot associate the same credential twice!".into()))?
+            .take::<Option<DbUser>>(0)
+            .map_err(|_| AuthError::CredentialDuplicate("Cannot associate the same credential twice!".into()))?
+            .ok_or(AuthError::UpdateFailed("Failed to add the authentication method!".into()))?
             .into())
     }
 
@@ -293,6 +296,28 @@ impl User {
             access: Token::generate(&access_claims)?,
             refresh: Token::generate(&refresh_claims)?,
         })
+    }
+
+    /// Fetches a user by their UUID
+    pub async fn get_by_uuid(db: &Surreal<Client>, uuid: &Uuid) -> AuthResult<Self> {
+        Ok(db
+            .query("SELECT * FROM $user_id;")
+            .bind(("user_id", Thing::from(("user".to_string(), uuid.to_string()))))
+            .await?
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::UserNotFound("The user couldn't be found or doesn't exist!".into()))?
+            .into())
+    }
+
+    /// Fetches the user that owns a given ID token
+    pub async fn get_by_id_token(db: &Surreal<Client>, id_token: &IdToken) -> AuthResult<Self> {
+
+        // Verifies the access token
+        let access_claims = Token::verify(&id_token.access, None)?;
+
+        // Fetches the user
+        Self::get_by_uuid(db, &access_claims.sub)
+            .await
     }
 
     /// Fetches the list of credentials associated with the [User]

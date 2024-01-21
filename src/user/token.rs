@@ -99,12 +99,12 @@ impl Token {
     }
 
     /// Verifies the validity of a token
-    pub fn verify(token: &Self, sub: String) -> AuthResult<TokenClaims> {
+    pub fn verify(token: &Self, sub: Option<String>) -> AuthResult<TokenClaims> {
         let mut validation_config = Validation::new(jsonwebtoken::Algorithm::ES256);
         validation_config.leeway = 5;
         validation_config.set_audience(&["some-client-id"]);
         validation_config.set_issuer(&["auth-alpha"]);
-        validation_config.sub = Some(sub);
+        validation_config.sub = sub;
         validation_config.validate_exp = false; // This will be checked independantly
 
         let claims = decode::<TokenClaims>(
