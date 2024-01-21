@@ -18,7 +18,7 @@ pub struct UserMetadata {
     pub verified: bool,
     /// The last authentication timestamp
     pub last_access: u64,
-    /// The last reset timestamp
+    /// The last password reset timestamp
     pub last_reset: u64,
 
 }
@@ -47,9 +47,13 @@ impl Buildable for UserMetadata {
 /// ```
 #[derive(Clone, Debug)]
 pub struct UserMetadataBuilder {
+    /// Whether or not the account is currently disabled
     pub disabled: Option<bool>,
+    /// Whether or not the account is currently verified
     pub verified: Option<bool>,
+    /// The last authentication timestamp
     pub last_access: Option<u64>,
+    /// The last password reset timestamp
     pub last_reset: Option<u64>,
 }
 

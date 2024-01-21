@@ -69,8 +69,26 @@ use self::token::TokenType;
 /// 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
-    /// This contains the [User]'s UUID. Tt's stored as a [Thing]
-    /// to make it play nice with the DB
+    /// This contains the [User]'s UUID.
+    pub id: Uuid,
+    /// The attributes are a set of custom fields that contain unique data
+    /// about the user.
+    pub attributes: Option<Box<dyn UserAttribute>>,
+    /// The metadata contains auth data such as previous password, 
+    /// last access location, and such.
+    pub metadata: UserMetadata,
+}
+
+/// This struct is the database representation of the [User] struct.
+/// 
+/// It's necessary since the DB requires that the id is a [Thing], but
+/// this makes the struct awkward when using it outside the auth module, 
+/// so we have this.
+/// 
+/// Whenever a [User] is saved to the DB, it's converted to a [DbUser], and viceversa.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct DbUser {
+    /// This contains the [User]'s UUID.
     pub id: Thing,
     /// The attributes are a set of custom fields that contain unique data
     /// about the user.
@@ -80,11 +98,36 @@ pub struct User {
     pub metadata: UserMetadata,
 }
 
+impl From<&User> for DbUser {
+    fn from(value: &User) -> Self {
+        Self {
+            id: Thing::from(("user".into(), value.id.to_string())),
+            attributes: value.attributes.clone(),
+            metadata: value.metadata,
+        }
+    }
+} 
+
+// TODO: ukw!!!
+
+impl From<DbUser> for User {
+    fn from(value: DbUser) -> Self {
+        Self {
+            id: Uuid::parse_str(match &value.id.id {
+                surrealdb::sql::Id::String(id) => id.as_str(),
+                _ => panic!() // This should never happen!!!
+            }).unwrap(),
+            attributes: value.attributes.clone(),
+            metadata: value.metadata,
+        }
+    }
+}
+
 /// This is the [Builder] struct for [User].
 #[derive(Clone, Debug, Default)]
 pub struct UserBuilder {
     /// The [User]'s UUID
-    pub id: Option<Thing>,
+    pub id: Option<Uuid>,
     /// The [User]'s attributes
     pub attributes: Option<Box<dyn UserAttribute>>,
     /// The [User]'s metadata 
@@ -110,7 +153,7 @@ impl Builder for UserBuilder {
         Self::Buildable {
             id: match &self.id {
                 Some(id) => id.clone(),
-                None => Thing::from((String::from("user"), Uuid::new_v4().to_string())),
+                None => Uuid::new_v4(),
             },
             attributes: self.attributes.clone(),
             metadata: match self.metadata {
@@ -124,7 +167,7 @@ impl Builder for UserBuilder {
 impl UserBuilder {
     /// Sets the [User]'s UUID
     pub fn id(&mut self, id: Uuid) -> &mut Self {
-        self.id = Some(Thing::from((String::from("user"), id.to_string())));
+        self.id = Some(id);
         self
     }
 
@@ -169,7 +212,7 @@ impl User {
 
     /// Saves the [User] to the database and associates it to the given credential
     pub async fn save<T: Credential + Serialize>(&self, db: &Surreal<Client>, credential: &T) -> AuthResult<Self> {
-        db
+        Ok(db
             .query("
                 BEGIN TRANSACTION;
                     CREATE $credential.id;
@@ -179,25 +222,29 @@ impl User {
                 COMMIT TRANSACTION;
             ")
             .bind(("credential", credential.hashed()?))
-            .bind(("user", &self))
+            .bind(("user", DbUser::from(self)))
             .await?
-            .take::<Option<Self>>(0)?
-            .ok_or(AuthError::InexistentUser)
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::InexistentUser)?
+            .into())
     }
 
     /// Applies any changes in the [User] struct by saving the in the DB
     pub async fn update(&self, db: &Surreal<Client>) -> AuthResult<Self> {
-        db
+        Ok(db
             .query("UPDATE $user.id CONTENT $user RETURN AFTER;")
-            .bind(("user", &self))
-            .await?
-            .take::<Option<Self>>(0)?
-            .ok_or(AuthError::InexistentUser)
+            .bind(("user", DbUser::from(self)))
+            .await
+            .unwrap()
+            .take::<Option<DbUser>>(0)
+            .unwrap()
+            .ok_or(AuthError::InexistentUser)?
+            .into())
     }
 
     /// Associates a new credential with the [User]
     pub async fn add_credential<T: Credential + Serialize>(&self, db: &Surreal<Client>, credential: &T) -> AuthResult<Self> {
-        db 
+        Ok(db 
             .query("
                 BEGIN TRANSACTION;
                     CREATE $credential.id;
@@ -206,10 +253,11 @@ impl User {
                 COMMIT TRANSACTION;
             ")
             .bind(("credential", credential.hashed()?))
-            .bind(("user", &self))
+            .bind(("user", DbUser::from(self)))
             .await?
-            .take::<Option<Self>>(0)?
-            .ok_or(AuthError::InexistentUser)
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::InexistentUser)?
+            .into())
     }
 
     /// Deletes the [User] from the database
@@ -220,19 +268,11 @@ impl User {
 
         db
             .query("DELETE $user_id, $credential_ids;")
-            .bind(("user_id", &self.id))
+            .bind(("user_id", DbUser::from(self).id))
             .bind(("credential_ids", credentials))
             .await?;
 
         Ok(())
-    }
-
-    /// Fetches the UUID string from the [User]'s ID
-    pub fn uuid(&self) -> AuthResult<String> {
-        match &self.id.id {
-            surrealdb::sql::Id::String(id) => Ok(id.clone()),
-            _ => Err(AuthError::Panic("Invalid user UUID type!".into()))
-        }
     }
 
     /// Generates and signs an Id token
@@ -243,7 +283,7 @@ impl User {
         let access_claims = TokenClaims {
             iss: "auth-alpha".into(),
             r#type: token::TokenType::Access,
-            sub: self.uuid()?,
+            sub: self.id,
             aud: "some-client-id".into(),
             iat: timestamp,
             exp: timestamp + 3600,
@@ -263,7 +303,7 @@ impl User {
     pub async fn credentials(&self, db: &Surreal<Client>) -> AuthResult<Vec<Thing>> {
         let credentials: Vec<Thing> = db
             .query("SELECT in FROM ($user_id)<-authenticates;")
-            .bind(("user_id", &self.id))
+            .bind(("user_id", DbUser::from(self).id))
             .await?
             .take("in")?;
 

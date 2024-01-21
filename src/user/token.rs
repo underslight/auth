@@ -22,7 +22,7 @@ pub struct TokenClaims {
     /// The scope and permissions of the token
     pub r#type: TokenType,
     /// The owner of the token
-    pub sub: String,
+    pub sub: uuid::Uuid,
     /// Id of the server that issued the token
     pub iss: String,
     /// The ID of the SDK which is allowed to consume the token
