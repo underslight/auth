@@ -1,8 +1,14 @@
+use serde::{Deserialize, Serialize};
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
 use crate::prelude::*;
 
 /// Email/password authentication
 pub mod email_password;
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum CredentialType {
+    EmailPassword,
+}
 
 /// Defines all credential types
 #[async_trait::async_trait]
@@ -28,6 +34,8 @@ pub trait Credential: std::fmt::Debug {
     /// while the second string is the actual credential identifier (which is usually the [User]'s email).
     /// This is because different credential types tend to have the same identifier (usually an email).
     fn id(&self) -> &Thing;
+
+    fn r#type(&self) -> CredentialType;
 
     /// Returns a credential with all the sensitive data hashed.
     /// This should only be used when binding to a query

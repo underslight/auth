@@ -35,6 +35,7 @@ use attributes::UserAttribute;
 use jsonwebtoken::get_current_timestamp;
 use serde::Deserialize;
 use surrealdb::engine::remote::ws::Client;
+use surrealdb::sql::Value;
 use surrealdb::Surreal;
 
 use crate::builder::*;
@@ -241,7 +242,25 @@ impl User {
     }
 
     /// Associates a new credential with the [User]
-    pub async fn add_credential<T: Credential + Serialize>(&self, db: &Surreal<Client>, credential: &T) -> AuthResult<Self> {
+    pub async fn add_credential(&self, db: &Surreal<Client>, credential: Box<dyn Credential>) -> AuthResult<Self> {
+
+        // Checks if this type of credential has already been associated
+        let already_associated = self
+            .credentials(&db)
+            .await?
+            .iter()
+            .find(|id| match &id.id {
+                surrealdb::sql::Id::Array(array) => match &array.0[0] {
+                    Value::Strand(r#type) => r#type.0 == format!("{:?}", credential.r#type()),
+                    _ => false,
+                }
+                _ => false,
+            }).is_some();
+
+        if already_associated {
+            return Err(AuthError::CredentialDuplicate("Cannot associate the same credential twice!".into()));
+        }
+
         Ok(db 
             .query("
                 BEGIN TRANSACTION;

@@ -1,4 +1,4 @@
-use super::Credential;
+use super::{Credential, CredentialType};
 use crate::prelude::*;
 use argon2::{ 
     password_hash::{rand_core::OsRng, SaltString},
@@ -50,6 +50,10 @@ impl Credential for EmailPasswordCredential {
 
     fn id(&self) -> &Thing {
         &self.id 
+    }
+
+    fn r#type(&self) -> CredentialType {
+        CredentialType::EmailPassword
     }
 
     fn hashed(&self) -> AuthResult<Box<dyn Credential>> {
