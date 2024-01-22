@@ -6,8 +6,8 @@ use thiserror::Error;
 pub enum AuthError {
     #[error("{0}")]
     UserNotFound(String),
-    #[error("The user's account has been disabled!")]
-    UserDisabled,
+    #[error("The account was disabled!")]
+    UserDisabled(Vec<String>),
     #[error("Failed to calculate hash!")]
     HashFailed,
     #[error("{0}")]

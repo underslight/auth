@@ -10,10 +10,10 @@ use serde::Serialize;
 /// [ ] Last access location
 /// [ ] Last password
 /// [ ] Disabled reason
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UserMetadata {
     /// Whether or not the account is currently disabled
-    pub disabled: bool,
+    pub disabled: Option<Vec<String>>,
     /// Whether or not the account is currently verified
     pub verified: bool,
     /// The last authentication timestamp
@@ -39,7 +39,7 @@ impl Buildable for UserMetadata {
 /// ```ignore
 /// let timestamp = get_current_timestamp();
 /// let user_metadata = UserMetadata::builder() // Gets the builder
-///     .disabled(true)
+///     .disabled("due to inactivity (12 months)".into())
 ///     .verified(true)
 ///     .last_access(timestamp)
 ///     .last_reset(timestamp)
@@ -48,7 +48,7 @@ impl Buildable for UserMetadata {
 #[derive(Clone, Debug)]
 pub struct UserMetadataBuilder {
     /// Whether or not the account is currently disabled
-    pub disabled: Option<bool>,
+    pub disabled: Option<Vec<String>>,
     /// Whether or not the account is currently verified
     pub verified: Option<bool>,
     /// The last authentication timestamp
@@ -62,7 +62,7 @@ impl Default for UserMetadataBuilder {
         let timestamp = jsonwebtoken::get_current_timestamp();
 
         Self {
-            disabled: Some(false),
+            disabled: None,
             verified: Some(false),
             last_access: Some(timestamp),
             last_reset: Some(timestamp),
@@ -83,10 +83,7 @@ impl Builder for UserMetadataBuilder {
 
     fn build_safe(&self) -> Self::Buildable {
         Self::Buildable {
-            disabled: match self.disabled {
-                Some(disabled) => disabled,
-                None => false,
-            },
+            disabled: self.disabled.clone(),
             verified: match self.verified {
                 Some(verified) => verified,
                 None => false,
@@ -110,10 +107,10 @@ impl UserMetadataBuilder {
     /// # Example
     /// ```ignore
     /// let metadata = UserMetadata::builder()
-    ///     .disabled(true)
+    ///     .disabled(vec!["due to inactivity (18 months)".into()])
     ///     .build_safe();
     /// ```
-    pub fn disabled(&mut self, disabled: bool) -> &mut Self {
+    pub fn disabled(&mut self, disabled: Vec<String>) -> &mut Self {
         self.disabled = Some(disabled);
         self
     }
@@ -178,10 +175,10 @@ mod test {
     #[test]
     fn metadata_builder_disabled() {
         let metadata = UserMetadata::builder()
-            .disabled(true)
+            .disabled(vec!["due to inactivity (24 months)".into()])
             .build_safe();
 
-        assert_eq!(metadata.disabled, true)
+        assert_eq!(metadata.disabled, Some(vec![String::from("due to inactivity (24 months")]))
     }
 
     #[test]

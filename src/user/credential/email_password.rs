@@ -93,8 +93,8 @@ impl Credential for EmailPasswordCredential {
             .into();
 
         // Checks if the user's account has been disabled
-        if user.metadata.disabled {
-            return Err(AuthError::UserDisabled);
+        if let Some(reason) = user.metadata.disabled {
+            return Err(AuthError::UserDisabled(reason));
         }
 
         // Updates the last access timestamp

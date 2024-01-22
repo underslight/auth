@@ -103,7 +103,7 @@ impl From<&User> for DbUser {
         Self {
             id: Thing::from(("user".into(), value.id.to_string())),
             attributes: value.attributes.clone(),
-            metadata: value.metadata,
+            metadata: value.metadata.clone(),
         }
     }
 } 
@@ -116,7 +116,7 @@ impl From<DbUser> for User {
                 _ => panic!() // This should never happen!!!
             }).unwrap(),
             attributes: value.attributes.clone(),
-            metadata: value.metadata,
+            metadata: value.metadata.clone(),
         }
     }
 }
@@ -154,8 +154,8 @@ impl Builder for UserBuilder {
                 None => Uuid::new_v4(),
             },
             attributes: self.attributes.clone(),
-            metadata: match self.metadata {
-                Some(metadata) => metadata,
+            metadata: match &self.metadata {
+                Some(metadata) => metadata.clone(),
                 None => UserMetadata::default(),
             },
         }
@@ -187,7 +187,7 @@ impl User {
     /// 
     /// # Note:
     /// To apply the changes you must call the [update](Self::update) method
-    pub fn disabled(&mut self, disabled: bool) -> &mut Self {
+    pub fn disabled(&mut self, disabled: Option<Vec<String>>) -> &mut Self {
         self.metadata.disabled = disabled;
         self
 

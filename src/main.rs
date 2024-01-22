@@ -5,9 +5,6 @@ use auth::user::attributes::UserAttribute;
 
 use auth::user::credential::email_password::EmailPasswordCredential;
 use auth::user::metadata::UserMetadata;
-// use auth::user::credential::email_password::EmailPasswordCredential;
-// use auth::user::credential::Credential;
-// use auth::user::metadata::UserMetadata;
 use serde::{Deserialize, Serialize};
 use surrealdb::engine::remote::ws::Ws;
 use surrealdb::opt::auth::Database;
@@ -43,9 +40,13 @@ async fn main() -> AuthResult<()> {
     .await
     .unwrap();
 
-    let c = EmailPasswordCredential::new("studente@maxwell.mi.it".into(), "password".into());
+    let c = EmailPasswordCredential::new("prof@maxwell.mi.it".into(), "password".into());
     let _u = User::builder()
-        .metadata(UserMetadata::builder().build_safe())
+        .metadata(
+            UserMetadata::builder()
+                .disabled(vec!["Projectile vomited at the teacher".into()])
+                .build_safe()
+        )
         .build_safe()
         .save(&db, &c)
         .await
