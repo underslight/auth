@@ -2,6 +2,7 @@ use std::{fs::File, io::{BufReader, Read}};
 use crate::prelude::*;
 use jsonwebtoken::{decode, encode, get_current_timestamp, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use surrealdb::{engine::remote::ws::Client, Surreal};
 
 /// Specifies the scope and permissions of a token
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -99,7 +100,7 @@ impl Token {
     }
 
     /// Verifies the validity of a token
-    pub fn verify(token: &Self, sub: Option<String>) -> AuthResult<TokenClaims> {
+    pub fn verify(&self, sub: Option<String>) -> AuthResult<TokenClaims> {
         let mut validation_config = Validation::new(jsonwebtoken::Algorithm::ES256);
         validation_config.leeway = 5;
         validation_config.set_audience(&["some-client-id"]);
@@ -108,7 +109,7 @@ impl Token {
         validation_config.validate_exp = false; // This will be checked independantly
 
         let claims = decode::<TokenClaims>(
-            token.data.as_str(), &
+            self.data.as_str(), &
             Self::get_decoding_key()?, 
             &validation_config
         )?.claims;
@@ -129,6 +130,39 @@ impl Token {
 pub struct IdToken {
     /// Used to authenticate the [User]
     pub access: Token,
-    /// USed to refresh the access token when it expires
+    /// Used to refresh the access token when it expires
     pub refresh: Token,
+}
+
+impl IdToken {
+
+    pub async fn refresh(&self, db: &Surreal<Client>) -> AuthResult<Self> {
+
+        // Checks if the refresh and access token belong to the same user
+        let access_claims = self.access.verify(None)?;
+        let refresh_claims = self.refresh.verify(None)?;
+
+        if access_claims.sub != refresh_claims.sub {
+            return Err(AuthError::TokenInvalid);
+        }
+
+        let current_timestamp = get_current_timestamp();
+
+        // Checks if the access token is expired
+        if access_claims.exp < current_timestamp {
+            return Ok(self.to_owned());
+        }
+
+        // Checks if the refresh token has expired
+        if refresh_claims.exp >= current_timestamp {
+            return Err(AuthError::TokenExpired);
+        }
+
+        // Refreshes the token
+        let id_token = User::get_by_uuid(db, &access_claims.sub)
+            .await?
+            .get_id_token()?;
+
+        Ok(id_token)
+    }
 }

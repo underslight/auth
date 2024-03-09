@@ -85,9 +85,6 @@
 /// ```
 pub mod builder;
 
-/// Database operations
-pub mod database;
-
 /// Error propagation and messages
 ///
 /// Error handling in this crate is relatively simple:
