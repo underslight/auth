@@ -16,6 +16,8 @@ pub enum AuthError {
     CredentialOnly(String),
     #[error("{0}")]
     CredentialNotFound(String),
+    #[error("No MFA code was provided or it was incorrect!")]
+    MfaRequired,
     #[error("IO error!")]
     Io(std::io::Error),
     #[error("{0}")]

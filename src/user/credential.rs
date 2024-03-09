@@ -1,47 +1,53 @@
 use serde::{Deserialize, Serialize};
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
 use crate::prelude::*;
+use strum_macros::{EnumString, Display};
 
 /// Email/password authentication
 pub mod email_password;
+/// TOTP MFA authentication
+pub mod totp;
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum CredentialType {
+#[typetag::serde(tag = "type")]
+pub trait DbAuthMethod: std::fmt::Debug + Send + Sync {
+    /// Returns the auth method's id
+    /// 
+    /// # Note:
+    /// Auth method ids have a particular structure: they're an array of two strings.
+    /// The first string represent the method type (e.g `EmailPassword`, `GoogleOauth`, etc.)
+    /// while the second string is the actual method identifier (which is usually the [User]'s email).
+    /// This is because different credential types tend to have the same identifier.
+    fn id(&self) -> Thing;
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, EnumString, Display, PartialEq)]
+pub enum AuthMethodType {
     EmailPassword,
 }
 
-/// Defines all credential types
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, EnumString, Display, PartialEq)]
+pub enum MfaMethodType {
+    Totp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaCode {
+    pub method: MfaMethodType,
+    pub data: String,
+}
+
+/// Defines all primary credential types
 #[async_trait::async_trait]
 #[typetag::serde(tag = "type")]
-pub trait Credential: std::fmt::Debug {
+pub trait AuthMethod: std::fmt::Debug {
 
-    // /// Saves the credential to the database. 
-    // /// When a credential is saved to the DB it automatically creates
-    // /// a new empty [User] and associates itself with that [User].
-    // async fn save(&self, db: &Self::Database) -> AuthResult<User>;
+    /// Returns the type of authentication method
+    fn r#type(&self) -> AuthMethodType;
 
-    // /// This does a very similar thing as [save](Credential::save), except
-    // /// it associates the [Credential] with a preexisting [User].
-    // /// 
-    // /// This should be used when a [User] adds a new auth method.
-    // async fn associate(&self, db: &Self::Database, user: &User) -> AuthResult<Self>;
+    // /// Returns the restructured credential that should be inserted into the DB
+    fn into_db(&self) -> AuthResult<Box<dyn DbAuthMethod>>; 
 
-    /// Returns the credential's id
-    /// 
-    /// # Note:
-    /// Credential ids have a particular structure: they're an array of two strings.
-    /// The first string represent the credential type (e.g `EmailPassword`, `GoogleOauth`, etc.)
-    /// while the second string is the actual credential identifier (which is usually the [User]'s email).
-    /// This is because different credential types tend to have the same identifier (usually an email).
-    fn id(&self) -> &Thing;
-
-    fn r#type(&self) -> CredentialType;
-
-    /// Returns a credential with all the sensitive data hashed.
-    /// This should only be used when binding to a query
-    fn hashed(&self) -> AuthResult<Box<dyn Credential>>;
-
-    /// Authenticates a credential. If the credential values are correct, the 
+    /// Uses the credentials provided to authenticate the [User]. If the credential values are correct, the 
     /// function will return the [User] associated with it
     /// 
     /// # Example
@@ -57,5 +63,12 @@ pub trait Credential: std::fmt::Debug {
     ///     .await
     ///     .unwrap();
     /// ```
-    async fn authenticate(&self, db: &Surreal<Client>) -> AuthResult<User>;
+    async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<User>;
+}
+
+#[typetag::serde(tag = "type")]
+pub trait MfaMethod: std::fmt::Debug {
+    fn id(&self) -> Thing;
+    fn r#type(&self) -> MfaMethodType;
+    fn verify(&self, input: String) -> AuthResult<bool>;
 }

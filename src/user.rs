@@ -31,27 +31,19 @@ pub mod attributes;
 /// Jwts and all sorts of auth tokens
 pub mod token;
 
+use std::str::FromStr;
+
 use attributes::UserAttribute;
 use jsonwebtoken::get_current_timestamp;
-use serde::Deserialize;
-use surrealdb::engine::remote::ws::Client;
-use surrealdb::sql::Value;
-use surrealdb::Surreal;
+use serde::{Serialize, Deserialize};
+use surrealdb::{engine::remote::ws::Client, sql::{Value, Thing}, Surreal};
+use uuid::Uuid;
 
 use crate::builder::*;
 use crate::prelude::*;
 use metadata::UserMetadata;
-use serde::Serialize;
-use surrealdb::sql::Thing;
-
-
-use uuid::Uuid;
-
-use self::credential::Credential;
-use self::token::IdToken;
-use self::token::Token;
-use self::token::TokenClaims;
-use self::token::TokenType;
+use self::credential::{AuthMethod, AuthMethodType, DbAuthMethod, MfaMethod, MfaMethodType};
+use self::token::{IdToken, Token, TokenClaims, TokenType};
 
 /// This struct contains the metadata and attributes of each user.
 /// 
@@ -209,8 +201,8 @@ impl User {
         self
     }
 
-    /// Saves the [User] to the database and associates it to the given credential
-    pub async fn save<T: Credential + Serialize>(&self, db: &Surreal<Client>, credential: &T) -> AuthResult<Self> {
+    /// Saves the [User] to the database and associates it to the given auth method
+    pub async fn save(&self, db: &Surreal<Client>, credential: Box<dyn AuthMethod>) -> AuthResult<Self> {
         Ok(db
             .query("
                 BEGIN TRANSACTION;
@@ -220,7 +212,7 @@ impl User {
                     RETURN $user;
                 COMMIT TRANSACTION;
             ")
-            .bind(("credential", credential.hashed()?))
+            .bind(("credential", credential.into_db()?))
             .bind(("user", DbUser::from(self)))
             .await?
             .take::<Option<DbUser>>(0)
@@ -241,21 +233,16 @@ impl User {
             .into())
     }
 
-    /// Associates a new credential with the [User]
-    pub async fn add_credential(&self, db: &Surreal<Client>, credential: Box<dyn Credential>) -> AuthResult<Self> {
+    /// Associates a new authentication method with the [User]
+    pub async fn add_auth_method(&self, db: &Surreal<Client>, credential: Box<dyn AuthMethod>) -> AuthResult<Self> {
 
         // Checks if this type of credential has already been associated
         let already_associated = self
-            .credentials(&db)
+            .get_auth_methods(db)
             .await?
             .iter()
-            .find(|id| match &id.id {
-                surrealdb::sql::Id::Array(array) => match &array.0[0] {
-                    Value::Strand(r#type) => r#type.0 == format!("{:?}", credential.r#type()),
-                    _ => false,
-                }
-                _ => false,
-            }).is_some();
+            .find(|&&method| method == credential.r#type())
+            .is_some();
 
         if already_associated {
             return Err(AuthError::CredentialDuplicate("Cannot associate the same credential twice!".into()));
@@ -269,7 +256,7 @@ impl User {
                     RETURN $user;
                 COMMIT TRANSACTION;
             ")
-            .bind(("credential", credential.hashed()?))
+            .bind(("credential", credential.into_db()?))
             .bind(("user", DbUser::from(self)))
             .await?
             .take::<Option<DbUser>>(0)
@@ -278,16 +265,59 @@ impl User {
             .into())
     }
 
+    /// Adds a new MFa method
+    pub async fn add_mfa_method(&self, db: &Surreal<Client>, credential: Box<dyn MfaMethod>) -> AuthResult<Self> {
+
+        // Checks if this MFA method has already been associated
+        let already_associated = self
+            .get_mfa_methods(db)
+            .await?
+            .iter()
+            .find(|&&method| method == credential.r#type())
+            .is_some();
+
+        if already_associated {
+            return Err(AuthError::CredentialDuplicate("Cannot associated the same MFA method twice!".into()));
+        }
+
+        Ok(db
+            .query("
+                BEGIN TRANSACTION;
+                    CREATE $mfa_method.id;
+                    RELATE ($mfa_method.id)->verifies->($user.id) CONTENT $mfa_method;
+                    RETURN $user;
+                COMMIT TRANSACTION;
+            ")
+            .bind(("mfa_method", credential))
+            .bind(("user", DbUser::from(self)))
+            .await?
+            .take::<Option<DbUser>>(0)
+            .map_err(|_| AuthError::CredentialDuplicate("Cannot associate the same MFA method twice!".into()))?
+            .ok_or(AuthError::UpdateFailed("Failed to add the MFA method!".into()))?
+            .into()
+        )
+    }
+
     /// Deletes the [User] from the database
     pub async fn delete(&self, db: &Surreal<Client>) -> AuthResult<()> {
-        let credentials = self
-            .credentials(&db)
-            .await?;
-
         db
-            .query("DELETE $user_id, $credential_ids;")
+            .query("
+                BEGIN TRANSACTION;
+                    LET $auth_credentials = (SELECT in FROM ($user_id)<-authenticates);
+                    LET $mfa_credentials = (SELECT in FROM ($user_id)<-verifies);
+
+                    FOR $auth_credential IN $auth_credentials {
+                        DELETE $auth_credential['in'];
+                    };
+
+                    FOR $mfa_credential IN $mfa_credentials {
+                        DELETE $mfa_credential['in'];
+                    };
+
+                    DELETE $user_id;
+                COMMIT TRANSACTION;
+            ")
             .bind(("user_id", DbUser::from(self).id))
-            .bind(("credential_ids", credentials))
             .await?;
 
         Ok(())
@@ -339,39 +369,153 @@ impl User {
             .await
     }
 
-    /// Fetches the list of credentials associated with the [User]
-    pub async fn credentials(&self, db: &Surreal<Client>) -> AuthResult<Vec<Thing>> {
-        let credentials: Vec<Thing> = db
+    /// Fetches the user that owns a given access token
+    pub async fn get_by_access_token(db: &Surreal<Client>, access_token: &Token) -> AuthResult<Self> {
+
+        // Verifies the access token
+        let access_claims = Token::verify(&access_token, None)?;
+
+        // Fetches the user
+        Self::get_by_uuid(db, &access_claims.sub)
+            .await
+    }
+
+    // TODO: REMOVE PANICS!!!
+    /// Fetches the list of authentication methods associated with the [User]
+    pub async fn get_auth_methods(&self, db: &Surreal<Client>) -> AuthResult<Vec<AuthMethodType>> {
+        let auth_methods = db
             .query("SELECT in FROM ($user_id)<-authenticates;")
             .bind(("user_id", DbUser::from(self).id))
             .await?
-            .take("in")?;
+            .take::<Vec<Thing>>("in")?
+            .iter()
+            .map(|method| match &method.id {
+                surrealdb::sql::Id::Array(array) => match &array.0[0] {
+                    Value::Strand(r#type) => AuthMethodType::from_str(r#type.0.as_str()).unwrap(),
+                    _ => panic!(), 
+                },
+                _ => panic!(),
+            })
+            .collect::<Vec<AuthMethodType>>();
 
-        Ok(credentials)
+        Ok(auth_methods)
     }
 
-    /// Deletes a given credential as long as it's associated with the [User] and it's not the only credential
-    pub async fn remove_credential<T: Credential + Serialize>(&self, db: &Surreal<Client>, credential: &T) -> AuthResult<Self> {
+    pub async fn get_auth_credentials(&self, db: &Surreal<Client>, method: Option<AuthMethodType>) -> AuthResult<Vec<Box<dyn DbAuthMethod>>> {
+        let mut auth_credentials = db
+            .query("SELECT * FROM ($user_id)<-authenticates;")
+            .bind(("user_id", DbUser::from(self).id))
+            .await?
+            .take::<Vec<Box<dyn DbAuthMethod>>>(0)?;
 
-        // Gets all the credentials associated with the user
-        let credentials = self
-            .credentials(&db)
+        if let Some(method) = method {
+            auth_credentials = auth_credentials
+                .into_iter()
+                .filter(|credential| match &credential.id().id {
+                    surrealdb::sql::Id::Array(array) => match &array.0[0] {
+                        Value::Strand(r#type) => AuthMethodType::from_str(r#type.as_str()).unwrap() == method,
+                        _ => false,
+                    }
+                    _ => false,
+                })
+                .collect();
+        }
+
+        Ok(auth_credentials)
+    }
+
+    // TODO: REMOVE PANICS!!!
+    /// Fetches the list multi-factor authentication methods associated with the [User] 
+    pub async fn get_mfa_methods(&self, db: &Surreal<Client>) -> AuthResult<Vec<MfaMethodType>> {
+        let mfa_methods = db
+            .query("SELECT in FROM ($user_id)<-verifies;")
+            .bind(("user_id", DbUser::from(self).id))
+            .await?
+            .take::<Vec<Thing>>("in")?
+            .iter()
+            .map(|method| match &method.id {
+                surrealdb::sql::Id::Array(array) => match &array.0[0] {
+                    Value::Strand(r#type) => MfaMethodType::from_str(r#type.0.as_str()).unwrap(),
+                    _ => panic!(), 
+                },
+                _ => panic!(),
+            })
+            .collect::<Vec<MfaMethodType>>();
+
+        Ok(mfa_methods)
+    }
+
+    pub async fn get_mfa_credentials(&self, db: &Surreal<Client>, method: Option<MfaMethodType>) -> AuthResult<Vec<Box<dyn MfaMethod>>> {
+        let mut mfa_credentials = db
+            .query("SELECT * FROM ($user_id)<-verifies;")
+            .bind(("user_id", DbUser::from(self).id))
+            .await?
+            .take::<Vec<Box<dyn MfaMethod>>>(0)?;
+
+        if let Some(method) = method {
+            mfa_credentials = mfa_credentials
+                .into_iter()
+                .filter(|credential| match &credential.id().id {
+                    surrealdb::sql::Id::Array(array) => match &array.0[0] {
+                        Value::Strand(r#type) => MfaMethodType::from_str(r#type.as_str()).unwrap() == method,
+                        _ => false,
+                    }
+                    _ => false,
+                })
+                .collect();
+        }
+
+        Ok(mfa_credentials)
+    }
+
+    /// Deletes a given authentication method as long as it's associated with the [User]
+    pub async fn remove_mfa_method(&self, db: &Surreal<Client>, mfa_method_type: MfaMethodType) -> AuthResult<Self> {
+
+        // Gets the associated MFA method
+        let mfa_methods = self
+            .get_mfa_credentials(db, Some(mfa_method_type))
             .await?;
+        let mfa_method = mfa_methods.get(0);
 
-        // Checks if the credential exists
-        if credentials.iter().find(|&cred| cred == credential.id()).is_some() {
+        if let Some(mfa_method) = mfa_method {
+
+            // Deletes the MFA method
+            db
+                .query("DELETE $mfa_method_id;")
+                .bind(("mfa_method_id", mfa_method.id()))
+                .await?;
+        } else {
+
+            // The MFA method doesn't exist
+            return Err(AuthError::CredentialNotFound("The MFA method couldn't be found or doesn't exist".into()));
+        }
+
+        
+        Ok(self.clone())
+    }
+
+    /// Deletes a given authentication method as long as it's associated with the [User] and it's not the only credential
+    pub async fn remove_auth_method(&self, db: &Surreal<Client>, auth_method_type: AuthMethodType) -> AuthResult<Self> {
+
+        // Gets the auth method
+        let auth_methods = self
+            .get_auth_credentials(db, Some(auth_method_type))
+            .await?;
+        let auth_method = auth_methods.get(0);
+
+        if let Some(auth_method) = auth_method {
 
             // Cannot delete the user's only authentication method
-            if credentials.len() > 1 {
+            if auth_methods.len() > 1 {
 
                 // Deletes the credential
                 db 
-                    .query("DELETE $credential;")
-                    .bind(("credential", credential))
+                    .query("DELETE $auth_method_id;")
+                    .bind(("auth_method_id", auth_method.id()))
                     .await?;
             } else {
                 return Err(AuthError::CredentialOnly("Cannot remove the only authentication method!".into()));
-            }
+            }   
         } else {
             return Err(AuthError::CredentialNotFound("The authentication method couldn't be found or doesn't exist!".into()));
         }

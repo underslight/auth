@@ -5,11 +5,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// Contains the auth metadata for a [User]
-/// 
-/// Todo:
-/// [ ] Last access location
-/// [ ] Last password
-/// [ ] Disabled reason
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UserMetadata {
     /// Whether or not the account is currently disabled
