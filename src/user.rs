@@ -22,10 +22,9 @@ pub mod metadata;
 
 /// Custom [User] attributes 
 ///
-/// The [User] struct has an `attributes` field.
-/// This field can contain any struct (that implements [UserAttribute]).
-/// It should be used to contain custom data associated with each user, 
-/// such as name, role, etc. 
+/// The [User] struct contains a [UserAttributes] struct,
+/// which owns an optional field `custom` where any custom data
+/// about the user can be stored such as name, role, etc. 
 pub mod attributes;
 
 /// Jwts and all sorts of auth tokens
@@ -33,7 +32,6 @@ pub mod token;
 
 use std::str::FromStr;
 
-use attributes::UserAttribute;
 use jsonwebtoken::get_current_timestamp;
 use serde::{Serialize, Deserialize};
 use surrealdb::{engine::remote::ws::Client, sql::{Value, Thing}, Surreal};
@@ -42,7 +40,7 @@ use uuid::Uuid;
 use crate::builder::*;
 use crate::prelude::*;
 use metadata::UserMetadata;
-use self::credential::{AuthMethod, AuthMethodType, DbAuthMethod, MfaMethod, MfaMethodType};
+use self::{attributes::UserAttributes, credential::{AuthMethod, AuthMethodType, DbAuthMethod, MfaMethod, MfaMethodType}};
 use self::token::{IdToken, Token, TokenClaims, TokenType};
 
 /// This struct contains the metadata and attributes of each user.
@@ -66,7 +64,7 @@ pub struct User {
     pub id: Uuid,
     /// The attributes are a set of custom fields that contain unique data
     /// about the user.
-    pub attributes: Option<Box<dyn UserAttribute>>,
+    pub attributes: UserAttributes,
     /// The metadata contains auth data such as previous password, 
     /// last access location, and such.
     pub metadata: UserMetadata,
@@ -85,7 +83,7 @@ pub(crate) struct DbUser {
     pub id: Thing,
     /// The attributes are a set of custom fields that contain unique data
     /// about the user.
-    pub attributes: Option<Box<dyn UserAttribute>>,
+    pub attributes: UserAttributes,
     /// The metadata contains auth data such as previous password, 
     /// last access location, and such.
     pub metadata: UserMetadata,
@@ -120,7 +118,7 @@ pub struct UserBuilder {
     /// The [User]'s UUID
     pub id: Option<Uuid>,
     /// The [User]'s attributes
-    pub attributes: Option<Box<dyn UserAttribute>>,
+    pub attributes: Option<UserAttributes>,
     /// The [User]'s metadata 
     pub metadata: Option<UserMetadata>,
 }
@@ -146,7 +144,10 @@ impl Builder for UserBuilder {
                 Some(id) => id.clone(),
                 None => Uuid::new_v4(),
             },
-            attributes: self.attributes.clone(),
+            attributes: match &self.attributes {
+                Some(attributes) => attributes.clone(),
+                None => UserAttributes::default(),
+            },
             metadata: match &self.metadata {
                 Some(metadata) => metadata.clone(),
                 None => UserMetadata::default(),
@@ -163,7 +164,7 @@ impl UserBuilder {
     }
 
     /// Sets the [User]'s custom attributes
-    pub fn attributes(&mut self, attributes: Box<dyn UserAttribute>) -> &mut Self {
+    pub fn attributes(&mut self, attributes: UserAttributes) -> &mut Self {
         self.attributes = Some(attributes);
         self
     }
@@ -196,8 +197,8 @@ impl User {
     }
 
     /// Sets the `attributes` field in the [User] struct
-    pub fn attributes(&mut self, attributes: Box<dyn UserAttribute>) -> &mut Self {
-        self.attributes = Some(attributes);
+    pub fn attributes(&mut self, attributes: UserAttributes) -> &mut Self {
+        self.attributes = attributes;
         self
     }
 
