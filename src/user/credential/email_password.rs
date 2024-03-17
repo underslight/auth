@@ -123,7 +123,7 @@ impl AuthMethod for EmailPasswordMethod {
 
                 // Checks if MFA is required
                 if user.get_mfa_methods(db).await?.len() > 0 {
-                    return Err(AuthError::MfaRequired);
+                    return Err(AuthError::MfaRequired(user.get_mfa_token()?));
                 }
             }
         }

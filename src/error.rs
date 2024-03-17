@@ -1,4 +1,6 @@
 use thiserror::Error;
+
+use crate::user::token::Token;
  
 /// The error type
 #[non_exhaustive]
@@ -17,7 +19,7 @@ pub enum AuthError {
     #[error("{0}")]
     CredentialNotFound(String),
     #[error("No MFA code was provided or it was incorrect!")]
-    MfaRequired,
+    MfaRequired(Token),
     #[error("IO error!")]
     Io(std::io::Error),
     #[error("{0}")]
