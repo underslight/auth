@@ -375,19 +375,8 @@ impl User {
             .into())
     }
 
-    /// Fetches the user that owns a given ID token
-    pub async fn get_by_id_token(db: &Surreal<Client>, id_token: &IdToken) -> AuthResult<Self> {
-
-        // Verifies the access token
-        let access_claims = Token::verify(&id_token.access, None)?;
-
-        // Fetches the user
-        Self::get_by_uuid(db, &access_claims.sub)
-            .await
-    }
-
     /// Fetches the user that owns a given access token
-    pub async fn get_by_access_token(db: &Surreal<Client>, access_token: &Token) -> AuthResult<Self> {
+    pub async fn get_by_token(db: &Surreal<Client>, access_token: &Token) -> AuthResult<Self> {
 
         // Verifies the access token
         let access_claims = Token::verify(&access_token, None)?;
