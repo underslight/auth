@@ -6,4 +6,5 @@ use serde_json::Value;
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct UserAttributes {
     pub custom: Option<HashMap<String, Value>>,
+    pub profile_url: Option<String>,
 }
