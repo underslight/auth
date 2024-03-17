@@ -64,12 +64,6 @@ pub trait AuthMethod: std::fmt::Debug {
     ///     .unwrap();
     /// ```
     async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<User>;
-
-    /// Authenticates a credential without considering MFA and without updating
-    /// the last access timestamp in the metadata. 
-    /// 
-    /// *Warning:* should be used extremely carefully!!! 
-    async fn authenticate_loose(&self, db: &Surreal<Client>) -> AuthResult<User>;
 }
 
 #[typetag::serde(tag = "type")]

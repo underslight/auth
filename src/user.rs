@@ -348,6 +348,22 @@ impl User {
         })
     }
 
+    pub fn get_mfa_token(&self) -> AuthResult<Token> {
+
+        // Generates the claims
+        let timestamp = get_current_timestamp();
+        let mfa_claims = TokenClaims {
+            iss: "auth-alpha".into(),
+            r#type: token::TokenType::Mfa,
+            sub: self.id,
+            aud: "some-client-id".into(),
+            iat: timestamp,
+            exp: timestamp + 300,
+        };
+
+        Ok(Token::generate(&mfa_claims)?)
+    }
+
     /// Fetches a user by their UUID
     pub async fn get_by_uuid(db: &Surreal<Client>, uuid: &Uuid) -> AuthResult<Self> {
         Ok(db

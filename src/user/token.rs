@@ -15,6 +15,8 @@ pub enum TokenType {
     Verification,
     /// Allows the token to reset a [Credential](super::credential::Credential) associated with the [User] 
     Reset,
+    /// Allows to provide an MFA code without having to resubmit any credentials
+    Mfa,
 }
 
 /// The claims for a token

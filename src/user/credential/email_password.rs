@@ -142,36 +142,4 @@ impl AuthMethod for EmailPasswordMethod {
 
         Ok(user)
     }
-
-    async fn authenticate_loose(&self, db: &Surreal<Client>) -> AuthResult<User> {
-        
-        // Fetches the credential with the identifier (if it exists)
-        let credential: DbEmailPasswordMethod = db
-            .query("SELECT * FROM $credential_id->authenticates;")
-            .bind(("credential_id", self.into_db()?.id()))
-            .await?
-            .take::<Option<DbEmailPasswordMethod>>(0)?
-            .ok_or(AuthError::CredentialNotFound("1 The credential is incorrect or could not be found!".into()))?;
-
-        // Checks if the password and the hash match
-        Argon2::default()
-            .verify_password(self.password.as_ref(), &PasswordHash::new(&credential.data)?)
-            .map_err(|_| AuthError::CredentialNotFound("2 The credential is incorrect or could not be found!".into()))?;
-
-        // Fetches the user associated with the user id
-        let user: User = db
-            .query("SELECT * FROM $user_id;")
-            .bind(("user_id", credential.associated_user))
-            .await?
-            .take::<Option<DbUser>>(0)?
-            .ok_or(AuthError::Unknown("The associated user doesn't exist!".into()))?
-            .into();
-
-        // Checks if the user's account has been disabled
-        if let Some(reason) = user.metadata.disabled {
-            return Err(AuthError::UserDisabled(reason));
-        }
-
-        Ok(user)
-    }
 }
