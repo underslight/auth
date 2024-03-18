@@ -60,5 +60,11 @@ impl From<jsonwebtoken::errors::Error> for AuthError {
     }
 }
 
+impl From<totp_rs::TotpUrlError> for AuthError {
+    fn from(_value: totp_rs::TotpUrlError) -> Self {
+        Self::Unknown("MFA code verification failed!".into())
+    }
+}
+
 /// A time-saving replacement for [Result]
 pub type AuthResult<T> = std::result::Result<T, AuthError>;
