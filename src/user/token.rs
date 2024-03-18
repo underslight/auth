@@ -56,7 +56,7 @@ impl Token {
     fn get_encoding_key() -> AuthResult<EncodingKey> {
         
         // Reads the key bytes
-        let key_file = File::open("C:\\Users\\User\\Documents\\GitHub\\underslight\\auth\\src\\keys\\private.pem")?;
+        let key_file = File::open("D:\\GitHub\\underslight\\auth\\src\\keys\\private.pem")?;
         let mut reader = BufReader::new(key_file);
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
@@ -69,7 +69,7 @@ impl Token {
     /// TODO: FIX THIS!!!
     fn get_decoding_key() -> AuthResult<DecodingKey> {
         // Reads the key bytes
-        let key_file = File::open("C:\\Users\\User\\Documents\\GitHub\\underslight\\auth\\src\\keys\\public.pem")?;
+        let key_file = File::open("D:\\GitHub\\underslight\\auth\\src\\keys\\public.pem")?;
         let mut reader = BufReader::new(key_file);
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
