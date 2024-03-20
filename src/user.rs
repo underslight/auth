@@ -37,7 +37,7 @@ use serde::{Serialize, Deserialize};
 use surrealdb::{engine::remote::ws::Client, sql::{Value, Thing}, Surreal};
 use uuid::Uuid;
 
-use crate::builder::*;
+use crate::{builder::*, session::{AuthSession, AuthSessionId, AuthSessionState}};
 use crate::prelude::*;
 use metadata::UserMetadata;
 use self::{attributes::UserAttributes, credential::{AuthMethod, AuthMethodType, DbAuthMethod, MfaMethod, MfaMethodType}};
@@ -220,6 +220,16 @@ impl User {
             .map_err(|_| AuthError::CredentialDuplicate("This user is already registered!".into()))?
             .ok_or(AuthError::SaveFailed("Failed to save user!".into()))?
             .into())
+    }
+
+    /// Creates a new auth session
+    pub async fn create_auth_session(&self, db: &Surreal<Client>, state: AuthSessionState, agent: Option<String>) -> AuthResult<AuthSessionId> {
+        Ok(
+            AuthSession::new(&self.id, state, agent)
+                .save(db)
+                .await?
+                .id
+        )
     }
 
     /// Applies any changes in the [User] struct by saving the in the DB

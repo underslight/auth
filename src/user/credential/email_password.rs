@@ -1,5 +1,5 @@
 use super::{AuthMethod, AuthMethodType, DbAuthMethod, MfaCode};
-use crate::prelude::*;
+use crate::{prelude::*, session::{AuthSessionId, AuthSessionState}};
 use argon2::{ 
     password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
@@ -73,7 +73,7 @@ impl AuthMethod for EmailPasswordMethod {
         }))
     }
 
-    async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<User> {
+    async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<(User, AuthSessionId)> {
         
         // Fetches the credential with the identifier (if it exists)
         let credential: DbEmailPasswordMethod = db
@@ -97,6 +97,11 @@ impl AuthMethod for EmailPasswordMethod {
             .ok_or(AuthError::Unknown("The associated user doesn't exist!".into()))?
             .into();
 
+        // Checks if the user's account has been disabled
+        if let Some(reason) = user.metadata.disabled {
+            return Err(AuthError::UserDisabled(reason));
+        }
+
         // Checks the MFA code
         match mfa {
             Some(code) => {
@@ -105,14 +110,13 @@ impl AuthMethod for EmailPasswordMethod {
                     .get_mfa_credentials(db, Some(code.method))
                     .await?;
 
-                    let mfa_credential = mfa_credentials.get(0);
+                let mfa_credential = mfa_credentials.get(0);
 
                 if let Some(mfa_credential) = mfa_credential {
 
                     // Checks if the code is invalid
-                    if !mfa_credential.verify(code.data)? {
-                        return Err(AuthError::CredentialNotFound("The MFA credential is incorrect!".into()))
-                    }
+                    mfa_credential.verify(&user, db, code.data)
+                        .await?;
                 } else {
 
                     // The MFA method isn't supported
@@ -123,14 +127,15 @@ impl AuthMethod for EmailPasswordMethod {
 
                 // Checks if MFA is required
                 if user.get_mfa_methods(db).await?.len() > 0 {
-                    return Err(AuthError::MfaRequired(user.get_mfa_token()?));
+
+                    // Creates the auth session
+                    let session = user 
+                        .create_auth_session(db, AuthSessionState::PendingMfa, None)
+                        .await?;
+
+                    return Err(AuthError::MfaRequired(session));
                 }
             }
-        }
-
-        // Checks if the user's account has been disabled
-        if let Some(reason) = user.metadata.disabled {
-            return Err(AuthError::UserDisabled(reason));
         }
 
         // Updates the last access timestamp
@@ -140,6 +145,14 @@ impl AuthMethod for EmailPasswordMethod {
             .await
             .map_err(|_| AuthError::UpdateFailed("Failed to update last access!".into()))?;
 
-        Ok(user)
+        // Creates the auth session
+        let session = user
+            .create_auth_session(db, AuthSessionState::Authenticated, None)
+            .await?;
+
+        Ok((
+            user,
+            session
+        ))
     }
 }

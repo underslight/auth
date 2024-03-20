@@ -1,9 +1,9 @@
 use rand::{distributions::Uniform, Rng};
 use serde::{Serialize, Deserialize};
-use surrealdb::sql::{Thing, Id};
+use surrealdb::{engine::remote::ws::Client, sql::{Id, Thing}, Surreal};
 use totp_rs::TOTP;
 use uuid::Uuid;
-use crate::prelude::*;
+use crate::{prelude::*, session::{AuthSessionId, AuthSessionState}};
 use super::{MfaMethod, MfaMethodType};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,6 +66,7 @@ impl TotpMethod {
     }
 }
 
+#[async_trait::async_trait]
 #[typetag::serde]
 impl MfaMethod for TotpMethod {
     fn id(&self) -> Thing {
@@ -76,9 +77,9 @@ impl MfaMethod for TotpMethod {
         MfaMethodType::Totp
     }   
 
-    fn verify(&self, token: String) -> AuthResult<bool> {
+    async fn verify(&self, user: &User, db: &Surreal<Client>, token: String) -> AuthResult<AuthSessionId> {
         
-        let totp = TOTP::new(
+        let totp = TOTP::new( 
             totp_rs::Algorithm::SHA1,
             Self::CODE_LENGTH,
             Self::CODE_SKEW, 
@@ -88,9 +89,27 @@ impl MfaMethod for TotpMethod {
             String::from("test")
         )?;
 
-        Ok(totp.check(
+        let valid = totp.check(
             token.as_str(), 
             jsonwebtoken::get_current_timestamp()
-        ))
+        );
+
+        if valid {
+
+            // Creates the auth session
+            let session = user 
+                .create_auth_session(db, AuthSessionState::Authenticated, None)
+                .await?;
+
+            return Ok(session);
+        } else {
+
+            // Creates the pending auth session
+            let session = user 
+                .create_auth_session(db, AuthSessionState::PendingMfa, None)
+                .await?;
+
+            return Err(AuthError::MfaRequired(session));
+        }
     }
 }

@@ -1,5 +1,3 @@
-// #![warn(missing_docs)]
-
 //! Just an auth crate
 
 /// Traits for the builder pattern
@@ -99,3 +97,6 @@ pub mod prelude;
 
 /// [User](crate::user::User) operations 
 pub mod user;
+
+/// [User](crate::user::User) session management
+pub mod session;

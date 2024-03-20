@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
-use crate::prelude::*;
+use crate::{prelude::*, session::AuthSessionId};
 use strum_macros::{EnumString, Display};
 
 /// Email/password authentication
@@ -63,12 +63,13 @@ pub trait AuthMethod: std::fmt::Debug {
     ///     .await
     ///     .unwrap();
     /// ```
-    async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<User>;
+    async fn authenticate(&self, db: &Surreal<Client>, mfa: Option<MfaCode>) -> AuthResult<(User, AuthSessionId)>;
 }
 
+#[async_trait::async_trait]
 #[typetag::serde(tag = "type")]
-pub trait MfaMethod: std::fmt::Debug {
-    fn id(&self) -> Thing;
+pub trait MfaMethod: std::fmt::Debug + Send {
+    fn id(&self) -> Thing; 
     fn r#type(&self) -> MfaMethodType;
-    fn verify(&self, input: String) -> AuthResult<bool>;
+    async fn verify(&self, user: &User, db: &Surreal<Client>, input: String) -> AuthResult<AuthSessionId>;
 }
