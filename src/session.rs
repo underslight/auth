@@ -33,13 +33,27 @@ impl AuthSession {
     }
 
     pub async fn save(&self, db: &Surreal<Client>) -> AuthResult<Self> {
-        Ok(db
-            .query("CREATE session CONTENT $session;")
+        Ok(
+            db
+            .query("CREATE auth_session CONTENT $session;")
             .bind(("session", self))
             .await?
             .take::<Option<Self>>(0)
             .map_err(|_| AuthError::CredentialDuplicate("This user is already authenticated!".into()))?
             .ok_or(AuthError::SaveFailed("Failed to create the session!".into()))?
+            .into()
+        )
+    }
+
+    pub async fn get_by_id(db: &Surreal<Client>, id: AuthSessionId) -> AuthResult<Self> {
+        Ok(
+            db 
+            .query("SELECT * FROM type::thing('auth_session', $session_id);")
+            .bind(("session_id", id))
+            .await?
+            .take::<Option<Self>>(0)
+            .map_err(|_| AuthError::CredentialDuplicate("This user is already authenticated!".into()))?
+            .ok_or(AuthError::SaveFailed("The session doesn't exist or couldn't be found!".into()))?
             .into()
         )
     }

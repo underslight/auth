@@ -244,6 +244,23 @@ impl User {
             .into())
     }
 
+    pub async fn get_by_session_id(db: &Surreal<Client>, session_id: AuthSessionId) -> AuthResult<Self> {
+
+        // Gets the session
+        let session = AuthSession::get_by_id(db, session_id)
+            .await?;
+
+        let user: User = db 
+            .query("SELECT * FROM $user_id;")
+            .bind(("user_id", session.user.to_string()))
+            .await?
+            .take::<Option<DbUser>>(0)?
+            .ok_or(AuthError::Unknown("The associated user doesn't exist!".into()))?
+            .into();
+
+        Ok(user)
+    }
+
     /// Associates a new authentication method with the [User]
     pub async fn add_auth_method(&self, db: &Surreal<Client>, credential: Box<dyn AuthMethod>) -> AuthResult<Self> {
 
