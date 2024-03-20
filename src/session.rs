@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use surrealdb::{engine::remote::ws::Client, Surreal};
 use uuid::Uuid;
 
@@ -6,7 +7,7 @@ use crate::prelude::{AuthError, AuthResult};
 
 pub type AuthSessionId = String;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, EnumString, Display)]
 pub enum AuthSessionState {
     PendingMfa,
     Authenticated,
@@ -15,7 +16,7 @@ pub enum AuthSessionState {
 #[derive(Debug, Serialize, Deserialize)] 
 pub struct AuthSession {
     pub id: AuthSessionId,
-    pub user: Uuid,
+    pub user: String,
     pub state: AuthSessionState,
     pub expires: u64,
     pub agent: Option<String>,
@@ -25,7 +26,7 @@ impl AuthSession {
     pub fn new(user_id: &Uuid, state: AuthSessionState, agent: Option<String>) -> Self {
         Self {
             id: String::from("sad"),
-            user: user_id.clone(),
+            user: user_id.to_string(),
             state,
             expires: 1,
             agent,
